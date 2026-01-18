@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="data.js"></script>
+    <script>
+        // Global Error Monitor
+        window.onerror = function (msg, url, line) {
+            const errDiv = document.getElementById('error-monitor');
+            if (errDiv) {
+                errDiv.classList.remove('hidden');
+                errDiv.innerHTML += `<div class="p-2 border-b border-red-500/30">Line ${line}: ${msg}</div>`;
+            }
+            return false;
+        };
+    </script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                        },
+                        brand: {
+                            blue: '#3b82f6',
+                            green: '#10b981',
+                            red: '#ef4444',
+                            purple: '#8b5cf6'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="bg-dark-900 text-white min-h-screen p-6">
+
+    <!-- Header -->
+    <header class="mb-8 flex justify-between items-center">
+        <div>
+            <h1
+                class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-blue to-brand-purple">
+                Production Dashboard
+            </h1>
+            <p class="text-gray-400 mt-1">KPI Performance Overview</p>
+        </div>
+        <div class="px-4 py-2 bg-dark-800 rounded-lg border border-dark-700 flex items-center space-x-4">
+            <!-- Slicers -->
+            <div>
+                <label class="text-xs text-gray-500 mr-2">Year</label>
+                <select id="year-filter" onchange="renderDashboard()"
+                    class="bg-dark-900 border border-dark-600 text-white text-sm rounded-md focus:ring-brand-blue focus:border-brand-blue p-1">
+                    <option value="all">All Years</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 mr-2">Month</label>
+                <select id="month-filter" onchange="renderDashboard()"
+                    class="bg-dark-900 border border-dark-600 text-white text-sm rounded-md focus:ring-brand-blue focus:border-brand-blue p-1">
+                    <option value="all">All Months</option>
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+            </div>
+
+            <div class="h-6 w-px bg-dark-700 mx-2"></div>
+
+            <div>
+                <label class="text-xs text-gray-500 mr-2 flex items-center">
+                    Dashboard Mode
+                    <span class="ml-1 cursor-help opacity-60"
+                        title="Switch between different thematic views of the data.">ⓘ</span>
+                </label>
+                <select id="dashboard-mode" onchange="switchDashboardMode()"
+                    class="bg-dark-900 border border-dark-600 text-white text-sm rounded-md focus:ring-brand-blue focus:border-brand-blue p-1">
+                    <option value="standard">Standard Dashboard</option>
+                    <option value="executive">Executive Summary</option>
+                    <option value="production">Production Deep-Dive</option>
+                    <option value="waste">Waste & Quality</option>
+                    <option value="downtime">Downtime Analysis</option>
+                </select>
+            </div>
+
+            <div class="h-6 w-px bg-dark-700 mx-2"></div>
+
+            <div>
+                <label class="text-xs text-gray-500 mr-2 flex items-center">
+                    Area / Section
+                    <span class="ml-1 cursor-help opacity-60"
+                        title="Filter the entire dashboard by a specific production line or department.">ⓘ</span>
+                </label>
+                <div class="flex space-x-1">
+                    <select id="section-filter" onchange="renderDashboard()"
+                        class="bg-dark-900 border border-dark-600 text-white text-sm rounded-md focus:ring-brand-purple focus:border-brand-purple p-1">
+                        <option value="all" title="Aggregated view of all sections combined">Global Dashboard (Total)
+                        </option>
+                        <!-- Populated by JS -->
+                    </select>
+                    <button onclick="openSectionManager()"
+                        class="p-1 px-2 bg-dark-700 hover:bg-dark-600 text-brand-purple rounded-md text-xs transition-all"
+                        title="Manage Departments/Sections">+ Add</button>
+                </div>
+            </div>
+
+            <div class="h-6 w-px bg-dark-700 mx-2"></div>
+            <button onclick="hardReset()"
+                class="text-xs text-gray-500 hover:text-brand-red decoration-dotted underline">Troubleshoot</button>
+
+            <div class="h-6 w-px bg-dark-700 mx-2 ml-4"></div>
+            <div id="data-status"
+                title="This counts the total number of records found in your source file. It confirms that your data is loaded and wasn't accidentally filtered away."
+                class="flex items-center space-x-2 px-3 py-1 bg-dark-900 rounded-full border border-dark-700 cursor-help">
+                <div class="w-2 h-2 rounded-full bg-brand-green animate-pulse"></div>
+                <span class="text-xs text-gray-400 font-medium whitespace-nowrap">Loaded: <span id="row-count"
+                        class="text-white">0</span> records</span>
+                <span class="ml-1 text-[10px] opacity-40">ⓘ</span>
+            </div>
+
+            <div class="h-6 w-px bg-dark-700 mx-2"></div>
+            <span class="text-sm text-gray-400">Source:</span>
+            <span id="last-updated" class="ml-2 font-medium text-brand-blue">LIVE</span>
+        </div>
+    </header>
+
+    <!-- Dynamic KPI Cards -->
+    <div class="flex justify-end mb-4">
+        <button onclick="openCardConfig()" class="text-sm text-brand-blue hover:underline flex items-center">
+            <span class="mr-1">⚙️</span> Customize KPI Cards
+        </button>
+    </div>
+    <div id="kpi-cards-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        <!-- Dynamically populated by renderKPIs() -->
+    </div>
+
+
+    <!-- Product Portfolio Section -->
+    <div class="glass-card rounded-xl p-6 shadow-lg mb-8">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-200">Product Portfolio</h3>
+            <button onclick="openProductManager()" class="text-sm text-brand-blue hover:underline">+ Manage
+                Products</button>
+        </div>
+        <div id="product-list" class="flex flex-wrap gap-3">
+            <!-- Dynamic Product Tags -->
+        </div>
+    </div>
+
+    <!-- Analytics & Breakdowns -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Production Trends -->
+        <div class="glass-card rounded-xl p-6 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-200">Production Trends (FPL & Offline)</h3>
+                <select id="production-chart-type" onchange="renderDashboard()"
+                    class="bg-dark-900 border border-dark-600 text-white text-xs rounded-md p-1.5">
+                    <option value="area">Area Chart</option>
+                    <option value="line">Line Chart</option>
+                    <option value="bar">Bar Chart</option>
+                    <option value="stackedArea">Stacked Area</option>
+                </select>
+            </div>
+            <div class="relative h-64 w-full">
+                <canvas id="productionChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Waste Trends -->
+        <div class="glass-card rounded-xl p-6 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-200">Waste Trends (FPL & Offline)</h3>
+                <select id="waste-chart-type" onchange="renderDashboard()"
+                    class="bg-dark-900 border border-dark-600 text-white text-xs rounded-md p-1.5">
+                    <option value="area">Area Chart</option>
+                    <option value="line">Line Chart</option>
+                    <option value="bar">Bar Chart</option>
+                    <option value="stepLine">Step Line</option>
+                </select>
+            </div>
+            <div class="relative h-64 w-full">
+                <canvas id="wasteChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Breakdown Tool -->
+        <div class="glass-card rounded-xl p-6 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-200">Departmental Breakdowns</h3>
+                <div class="flex space-x-2">
+                    <select id="breakdown-type" onchange="renderDashboard()"
+                        class="bg-dark-900 border border-dark-600 text-white text-xs rounded-md p-1.5">
+                        <option value="downtime">Downtime</option>
+                        <option value="waste">Waste</option>
+                    </select>
+                    <select id="dept-filter" onchange="renderDashboard()"
+                        class="bg-dark-900 border border-dark-600 text-white text-xs rounded-md p-1.5 max-w-[120px]">
+                        <option value="all">All Depts</option>
+                    </select>
+                </div>
+            </div>
+            <div class="relative h-64 w-full">
+                <canvas id="mainBreakdownChart"></canvas>
+            </div>
+        </div>
+
+        <!-- OEE Efficiency Trend -->
+        <div class="glass-card rounded-xl p-6 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-200">Overall Equipment Effectiveness (OEE)</h3>
+                <select id="oee-chart-type" onchange="renderDashboard()"
+                    class="bg-dark-900 border border-dark-600 text-white text-xs rounded-md p-1.5">
+                    <option value="area">Area Chart</option>
+                    <option value="line">Line Chart</option>
+                    <option value="bar">Bar Chart</option>
+                    <option value="smoothLine">Smooth Line</option>
+                </select>
+            </div>
+            <div class="relative h-64 w-full">
+                <canvas id="efficiencyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Correlation Chart -->
+    <div class="glass-card rounded-xl p-6 shadow-lg mb-8">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-200">Production vs Waste Correlation</h3>
+            <select id="correlation-chart-type" onchange="renderDashboard()"
+                class="bg-dark-900 border border-dark-600 text-white text-xs rounded-md p-1.5">
+                <option value="mixed">Area + Bar (Dual Axis)</option>
+                <option value="scatter">Scatter Plot</option>
+                <option value="line">Dual Line</option>
+                <option value="bar">Grouped Bar</option>
+            </select>
+        </div>
+        <div class="relative h-72 w-full">
+            <canvas id="prodVsWasteChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Custom Analysis Section -->
+    <div class="glass-card rounded-xl p-6 shadow-lg mb-8">
+        <h3 class="text-lg font-semibold mb-4 text-gray-200">Custom Analysis</h3>
+        <p class="text-sm text-gray-400 mb-4">Select separate metrics to compare them on a dynamic chart.</p>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">Year Filter</label>
+                <select id="custom-year-filter"
+                    class="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-lg p-2.5 focus:ring-brand-green focus:border-brand-green">
+                    <option value="all">All Years</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">Month Filter</label>
+                <select id="custom-month-filter"
+                    class="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-lg p-2.5 focus:ring-brand-green focus:border-brand-green">
+                    <option value="all">All Months</option>
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">Section Filter</label>
+                <select id="custom-section-filter"
+                    class="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-lg p-2.5 focus:ring-brand-green focus:border-brand-green">
+                    <option value="all">All Sections</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">Metric 1 (Left Axis)</label>
+                <select id="custom-metric-1"
+                    class="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-lg p-2.5 focus:ring-brand-blue focus:border-brand-blue">
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">Metric 2 (Right Axis - Optional)</label>
+                <select id="custom-metric-2"
+                    class="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-lg p-2.5 focus:ring-brand-blue focus:border-brand-blue">
+                    <option value="">None</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">Chart Type</label>
+                <select id="custom-chart-type"
+                    class="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-lg p-2.5 focus:ring-brand-purple focus:border-brand-purple">
+                    <optgroup label="Classic Charts">
+                        <option value="line">Line Chart</option>
+                        <option value="bar">Bar Chart</option>
+                        <option value="pie">Pie Chart</option>
+                        <option value="radar">Radar Chart</option>
+                        <option value="doughnut">Doughnut Chart</option>
+                    </optgroup>
+                    <optgroup label="Advanced Layouts">
+                        <option value="horizontalBar">Horizontal Bar</option>
+                        <option value="stackedBar">Stacked Bar</option>
+                        <option value="stackedHorizontalBar">Stacked Horizontal Bar</option>
+                        <option value="groupedBar">Grouped Bar</option>
+                    </optgroup>
+                    <optgroup label="Trend & Analysis">
+                        <option value="area">Area Chart</option>
+                        <option value="stackedArea">Stacked Area</option>
+                        <option value="stepLine">Step Line</option>
+                        <option value="smoothLine">Smooth (Interpolated) Line</option>
+                        <option value="percentageArea">Percentage Area</option>
+                    </optgroup>
+                    <optgroup label="Complex Visuals">
+                        <option value="polarArea">Polar Area</option>
+                        <option value="scatter">Scatter Plot</option>
+                        <option value="mixedBarLine">Mixed Bar/Line</option>
+                        <option value="floatingBar">Floating Bar</option>
+                        <option value="dualAxisLine">Dual Axis Line</option>
+                        <option value="steppedArea">Stepped Area</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button onclick="renderCustomChart()"
+                    class="w-full px-4 py-2.5 bg-brand-blue hover:bg-blue-600 text-white rounded-lg transition-colors font-medium">
+                    Generate Chart
+                </button>
+            </div>
+        </div>
+
+        <div id="custom-chart-period" class="text-xs text-gray-500 mb-2 text-center hidden">
+            <span class="font-medium">Comparing:</span> <span id="custom-chart-period-text"></span>
+        </div>
+
+        <div class="relative h-96 w-full">
+            <canvas id="customChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Comment Popup Modal -->
+    <div id="comment-modal"
+        class="fixed inset-0 bg-black/60 hidden z-[100] flex items-center justify-center p-4 text-center">
+        <div
+            class="bg-dark-800 border border-dark-700 p-6 rounded-2xl shadow-2xl max-w-sm w-full transform transition-all inline-block align-middle">
+            <div class="flex justify-between items-start mb-4">
+                <h4 id="comment-modal-title" class="text-brand-blue font-bold text-lg">Month Observation</h4>
+                <button onclick="document.getElementById('comment-modal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-white">✕</button>
+            </div>
+            <p id="comment-modal-text" class="text-gray-300 italic leading-relaxed">No comment available.</p>
+            <div class="mt-6 flex justify-end">
+                <button onclick="document.getElementById('comment-modal').classList.add('hidden')"
+                    class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm transition-colors">Close</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Product Manager Modal -->
+    <div id="product-modal" class="fixed inset-0 bg-black/80 hidden z-[110] flex items-center justify-center p-4">
+        <div class="bg-dark-800 border border-dark-700 p-8 rounded-2xl shadow-2xl max-w-lg w-full">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-white">Manage Product Portfolio</h3>
+                <button onclick="document.getElementById('product-modal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-white">✕</button>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-400 mb-2">Add New Product</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="new-product-name" placeholder="Enter product name (e.g. FPL-30)"
+                        class="flex-1 bg-dark-900 border border-dark-600 rounded-lg px-4 py-2 text-white focus:ring-brand-blue focus:border-brand-blue outline-none">
+                    <button onclick="addProductFromModal()"
+                        class="px-6 py-2 bg-brand-blue hover:bg-blue-600 text-white rounded-lg font-medium transition-colors">Add</button>
+                </div>
+            </div>
+
+            <div class="border-t border-dark-700 pt-6">
+                <h4 class="text-sm font-semibold text-gray-400 mb-4 uppercase tracking-wider">Current Products</h4>
+                <div id="modal-product-list" class="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end">
+                <button onclick="document.getElementById('product-modal').classList.add('hidden')"
+                    class="px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg font-medium transition-colors">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section Manager Modal -->
+    <div id="section-modal" class="fixed inset-0 bg-black/80 hidden z-[110] flex items-center justify-center p-4">
+        <div class="bg-dark-800 border border-dark-700 p-8 rounded-2xl shadow-2xl max-w-lg w-full">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-white">Department / Section Manager</h3>
+                <button onclick="document.getElementById('section-modal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-white">✕</button>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-400 mb-2">Create New Section</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="new-section-name" placeholder="e.g. Line 5, Packaging, Assembly"
+                        class="flex-1 bg-dark-900 border border-dark-600 rounded-lg px-4 py-2 text-white focus:ring-brand-purple focus:border-brand-purple outline-none">
+                    <button onclick="addSectionFromModal()"
+                        class="px-6 py-2 bg-brand-purple hover:bg-purple-600 text-white rounded-lg font-medium transition-colors">Create</button>
+                </div>
+                <p class="text-[10px] text-gray-500 mt-2 italic">Sections allow you to group your data for targeted
+                    efficiency tracking.</p>
+            </div>
+
+            <div class="border-t border-dark-700 pt-6">
+                <h4 class="text-sm font-semibold text-gray-400 mb-4 uppercase tracking-wider">Active Sections</h4>
+                <div id="modal-section-list" class="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end">
+                <button onclick="document.getElementById('section-modal').classList.add('hidden')"
+                    class="px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg font-medium transition-colors">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Configuration Modal -->
+    <div id="kpi-modal" class="fixed inset-0 bg-black/80 hidden z-[110] flex items-center justify-center p-4">
+        <div class="bg-dark-800 border border-dark-700 p-8 rounded-2xl shadow-2xl max-w-2xl w-full">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h3 class="text-xl font-bold text-white">Customize KPI Cards</h3>
+                    <p class="text-xs text-gray-400 mt-1">Select any metrics to display on your main dashboard. New KPIs
+                        are automatically added to this list.</p>
+                </div>
+                <button onclick="document.getElementById('kpi-modal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-white">✕</button>
+            </div>
+
+            <div class="mb-4 flex justify-between items-center">
+                <span id="kpi-counter" class="text-sm font-medium text-brand-blue">0 selected</span>
+                <div class="space-x-3">
+                    <button onclick="selectAllKPIs()" class="text-xs text-gray-500 hover:text-brand-green">Select
+                        All</button>
+                    <button onclick="pinnedKPIs = []; renderKPIOptions();"
+                        class="text-xs text-gray-500 hover:text-brand-red">Clear All</button>
+                </div>
+            </div>
+
+            <div id="kpi-options-list"
+                class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar p-2">
+                <!-- Populated by JS -->
+            </div>
+
+            <div class="mt-8 flex justify-end space-x-3">
+                <button onclick="document.getElementById('kpi-modal').classList.add('hidden')"
+                    class="px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg font-medium transition-colors">Cancel</button>
+                <button onclick="saveKPIConfig()"
+                    class="px-6 py-2 bg-brand-blue hover:bg-blue-600 text-white rounded-lg font-medium transition-colors">Apply
+                    Changes</button>
+            </div>
+        </div>
+    </div>
+    <div id="editor-modal" class="fixed inset-0 bg-black/80 hidden z-50 overflow-y-auto">
+        <div class="min-h-screen px-4 text-center">
+            <span class="inline-block h-screen align-middle" aria-hidden="true">&#8203;</span>
+            <div
+                class="inline-block w-full max-w-7xl p-6 my-8 text-left align-middle transition-all transform bg-dark-800 border border-dark-700 shadow-xl rounded-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-2xl font-bold text-white">Edit Dashboard Data</h3>
+                    <button onclick="addNewKPI()"
+                        class="px-3 py-2 bg-brand-blue hover:bg-blue-600 text-white rounded-lg transition-colors font-medium text-sm">
+                        + Add New KPI
+                    </button>
+                    <div class="h-6 w-px bg-dark-700 mx-1"></div>
+                    <button onclick="addNewRow()"
+                        class="px-3 py-2 bg-brand-purple hover:bg-purple-600 text-white rounded-lg transition-colors font-medium text-sm">
+                        + Add Month
+                    </button>
+                    <div class="h-6 w-px bg-dark-700 mx-1"></div>
+                    <button onclick="exportData()"
+                        class="px-3 py-2 bg-dark-700 hover:bg-dark-600 text-brand-blue rounded-lg transition-colors font-medium text-sm flex items-center">
+                        <span class="mr-1">📤</span> Export
+                    </button>
+                    <button onclick="document.getElementById('import-input').click()"
+                        class="px-3 py-2 bg-dark-700 hover:bg-dark-600 text-brand-purple rounded-lg transition-colors font-medium text-sm flex items-center">
+                        <span class="mr-1">📥</span> Import
+                    </button>
+                    <input type="file" id="import-input" class="hidden" accept=".json" onchange="importData(event)">
+                    <div class="h-6 w-px bg-dark-700 mx-1"></div>
+                    <button onclick="saveData()"
+                        class="px-4 py-2 bg-brand-green hover:bg-green-600 text-white rounded-lg transition-colors font-medium text-sm">
+                        Save Changes
+                    </button>
+                    <button onclick="closeEditor()"
+                        class="px-3 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg transition-colors font-medium text-sm">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <p class="text-xs text-brand-blue mb-2 text-right">→ Scroll horizontally to see all columns</p>
+            <div class="overflow-x-auto rounded-lg border border-dark-700">
+                <table class="w-full text-sm text-left text-gray-400">
+                    <thead class="text-xs text-gray-200 uppercase bg-dark-900" id="editor-table-head">
+                        <!-- Dynamic Headers -->
+                    </thead>
+                    <tbody id="editor-table-body">
+                        <!-- Rows will be populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+                <p class="text-sm text-gray-500">Note: Changes are saved to your browser's local storage.</p>
+                <button onclick="resetData()" class="text-sm text-brand-red hover:text-red-400 font-medium">
+                    Reset to Original Excel Data
+                </button>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- Add Edit Button to Header -->
+    <script>
+        // Inject Edit Button into Header
+        const headerDiv = document.querySelector('header > div:last-child');
+        const editBtn = document.createElement('button');
+        editBtn.className = "mr-4 px-4 py-2 bg-brand-blue hover:bg-blue-600 text-white rounded-lg transition-colors font-medium text-sm";
+        editBtn.innerHTML = "✏️ Edit Data";
+        editBtn.onclick = openEditor;
+        headerDiv.insertBefore(editBtn, headerDiv.firstChild);
+
+        let charts = {};
+
+        // Safe localStorage parsing
+        function getSafeStorage(key, fallback) {
+            try {
+                const val = localStorage.getItem(key);
+                return val ? JSON.parse(val) : fallback;
+            } catch (e) {
+                console.warn(`Error parsing localStorage key "${key}", using fallback.`);
+                return fallback;
+            }
+        }
+
+        let products = getSafeStorage('dashboardProducts', ['FPL', 'Offline']);
+        let factorySections = getSafeStorage('factorySections', []);
+        let currentData = [];
+        let pinnedKPIs = getSafeStorage('pinnedKPIs', [
+            'FPL Production (kg)',
+            'Offline Production (kg)',
+            'OEE %',
+            'FPL vs Waste %',
+            'P-Plain-Gr Production (Total)'
+        ]);
+
+        const dashboardPresets = {
+            standard: [
+                'FPL Production (kg)', 'Offline Production (kg)', 'OEE %', 'FPL vs Waste %', 'P-Plain-Gr Production (Total)'
+            ],
+            executive: [
+                'OEE %', 'EE', 'Total Waste (kg)', 'Waste % (Total)', 'FPL Production (kg)', 'Offline Production (kg)'
+            ],
+            production: [
+                'FPL Production (kg)', 'Offline Production (kg)', 'OEE %', 'Running days', 'Used Time', 'Stoppage days'
+            ],
+            waste: [
+                'FPL Waste (kg)', 'Offline Waste (kg)', 'Total Waste (kg)', 'Waste % (Total)', 'FPL vs Waste %'
+            ],
+            downtime: [
+                'Stoppage days', 'Mech. Plant', 'Electrical Plant', 'Power House', 'Process', 'Planning (G.C/M.C)'
+            ]
+        };
+
+        function switchDashboardMode() {
+            const mode = document.getElementById('dashboard-mode').value;
+            if (dashboardPresets[mode]) {
+                pinnedKPIs = [...dashboardPresets[mode]];
+                localStorage.setItem('pinnedKPIs', JSON.stringify(pinnedKPIs));
+                renderDashboard();
+            }
+        }
+
+        function hardReset() {
+            if (confirm("This will clear all your local edits and try to reload the data from the source file. Continue?")) {
+                localStorage.clear();
+                window.location.reload();
+            }
+        }
+
+        function initData() {
+            console.log("Initializing Dashboard Data...");
+            const savedData = localStorage.getItem('kpi_dashboard_data');
+
+            if (savedData && savedData !== "[]") {
+                try {
+                    currentData = JSON.parse(savedData);
+                    console.log(`Loaded ${currentData.length} rows from Local Storage.`);
+                    document.getElementById('last-updated').textContent = "Local Edits";
+                } catch (e) {
+                    console.error("Local storage parse error:", e);
+                    currentData = window.dashboardData || [];
+                    document.getElementById('last-updated').textContent = "Excel Fallback";
+                }
+            } else {
+                currentData = window.dashboardData || [];
+                console.log(`Loaded ${currentData.length} rows from Excel Source (data.js).`);
+                document.getElementById('last-updated').textContent = "Excel Source";
+            }
+
+            if (!currentData || currentData.length === 0) {
+                console.error("CRITICAL: No data loaded from any source!");
+                document.getElementById('row-count').textContent = "ERROR";
+                alert("Data failed to load. Please click 'Troubleshoot' to reset.");
+            } else {
+                document.getElementById('row-count').textContent = currentData.length;
+            }
+
+            // Populate Section Filter
+            const sectionFilter = document.getElementById('section-filter');
+            const currentSection = sectionFilter.value;
+            const sections = new Set();
+            currentData.forEach(d => { if (d.Section) sections.add(d.Section); });
+            factorySections.forEach(s => sections.add(s)); // Add custom sections
+
+            sectionFilter.innerHTML = '<option value="all" title="View aggregated data across all departments/sections.">Global Dashboard (Total)</option>';
+            Array.from(sections).sort().forEach(s => {
+                sectionFilter.innerHTML += `<option value="${s}">Section: ${s}</option>`;
+            });
+            sectionFilter.value = sections.has(currentSection) ? currentSection : 'all';
+
+            // Populate Year Filter
+            const years = [...new Set(currentData.map(d => d.Month ? d.Month.substring(0, 4) : null).filter(y => y))].sort().reverse();
+            const yearFilter = document.getElementById('year-filter');
+            yearFilter.innerHTML = '<option value="all">All Years</option>';
+            years.forEach(y => {
+                yearFilter.innerHTML += `<option value="${y}">${y}</option>`;
+            });
+
+            renderProductList();
+            renderSectionList();
+            initCustomChartControls();
+            renderDashboard();
+        }
+
+        function openSectionManager() {
+            document.getElementById('section-modal').classList.remove('hidden');
+            renderSectionList();
+        }
+
+        function addSectionFromModal() {
+            const input = document.getElementById('new-section-name');
+            const name = input.value.trim();
+            if (name && !factorySections.includes(name)) {
+                factorySections.push(name);
+                localStorage.setItem('factorySections', JSON.stringify(factorySections));
+                input.value = '';
+                initData(); // Refresh filters
+            }
+        }
+
+        function removeSection(index) {
+            factorySections.splice(index, 1);
+            localStorage.setItem('factorySections', JSON.stringify(factorySections));
+            initData();
+        }
+
+        function renderSectionList() {
+            const modalContainer = document.getElementById('modal-section-list');
+            if (!modalContainer) return;
+            modalContainer.innerHTML = '';
+
+            factorySections.forEach((s, idx) => {
+                const item = document.createElement('div');
+                item.className = "flex justify-between items-center p-3 bg-dark-900/50 rounded-lg border border-dark-700 hover:border-dark-600 transition-all";
+                item.innerHTML = `
+                    <span class="text-gray-200 font-medium">${s}</span>
+                    <button onclick="removeSection(${idx})" class="p-1 px-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-md text-xs transition-all">Remove</button>
+                `;
+                modalContainer.appendChild(item);
+            });
+
+            if (factorySections.length === 0) {
+                modalContainer.innerHTML = '<p class="text-gray-500 italic text-sm text-center py-4">No custom sections added.</p>';
+            }
+        }
+
+        function renderProductList() {
+            const container = document.getElementById('product-list');
+            const modalContainer = document.getElementById('modal-product-list');
+            if (!container) return;
+
+            container.innerHTML = '';
+            if (modalContainer) modalContainer.innerHTML = '';
+
+            products.forEach((p, idx) => {
+                // Dashboard Tag
+                const tag = document.createElement('div');
+                tag.className = "flex items-center space-x-2 px-3 py-1 bg-brand-blue/10 border border-brand-blue/30 text-brand-blue rounded-full text-sm font-medium group";
+                tag.innerHTML = `
+                    <span>${p}</span>
+                    <button onclick="removeProduct(${idx})" class="text-xs text-brand-blue/50 hover:text-brand-red opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                `;
+                container.appendChild(tag);
+
+                // Modal Item
+                if (modalContainer) {
+                    const item = document.createElement('div');
+                    item.className = "flex justify-between items-center p-3 bg-dark-900/50 rounded-lg border border-dark-700 hover:border-dark-600 transition-all";
+                    item.innerHTML = `
+                        <span class="text-gray-200 font-medium">${p}</span>
+                        <button onclick="removeProduct(${idx})" class="p-1 px-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-md text-xs transition-all">Remove</button>
+                    `;
+                    modalContainer.appendChild(item);
+                }
+            });
+
+            if (products.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 italic text-sm">No active products added. Click "+ Manage Products" to start tracking.</p>';
+                if (modalContainer) modalContainer.innerHTML = '<p class="text-gray-500 italic text-sm text-center py-4">Portfolio is empty.</p>';
+            }
+        }
+
+        function removeProduct(index) {
+            products.splice(index, 1);
+            saveProducts();
+        }
+
+        function openProductManager() {
+            document.getElementById('product-modal').classList.remove('hidden');
+            renderProductList();
+        }
+
+        function addProductFromModal() {
+            const input = document.getElementById('new-product-name');
+            const name = input.value.trim();
+            if (name && !products.includes(name)) {
+                products.push(name);
+                saveProducts();
+                input.value = '';
+            } else if (products.includes(name)) {
+                alert("Product already in list");
+            }
+        }
+
+        function saveProducts() {
+            localStorage.setItem('dashboardProducts', JSON.stringify(products));
+            renderProductList();
+        }
+
+        function getProcessedData() {
+            if (!currentData || currentData.length === 0) return [];
+
+            const selectedYear = document.getElementById('year-filter').value;
+            const selectedMonth = document.getElementById('month-filter').value;
+            const selectedSection = document.getElementById('section-filter').value;
+
+            // 1. Filter
+            let filtered = currentData.filter(d => {
+                if (!d.Month) return false;
+                const date = d.Month;
+                const year = date.substring(0, 4);
+                const month = date.substring(5, 7);
+                const section = d.Section || 'Uncategorized';
+
+                if (selectedYear !== 'all' && year !== selectedYear) return false;
+                if (selectedMonth !== 'all' && month !== selectedMonth) return false;
+                if (selectedSection !== 'all' && section !== selectedSection) return false;
+
+                return true;
+            });
+
+            filtered.sort((a, b) => a.Month.localeCompare(b.Month));
+            return filtered;
+        }
+
+        function renderKPIs(data) {
+            const container = document.getElementById('kpi-cards-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">No data found for the current filters. Switch to "All Years" or "Global Dashboard".</p>';
+                return;
+            }
+
+            const sum = (arr) => arr.reduce((a, b) => {
+                const val = Number(b);
+                return a + (isNaN(val) ? 0 : val);
+            }, 0);
+            const avg = (arr) => {
+                const valid = arr.map(v => Number(v)).filter(v => !isNaN(v));
+                return valid.length ? sum(valid) / valid.length : 0;
+            };
+
+            const allKeys = Object.keys(currentData[0] || {});
+            const wasteKeys = allKeys.filter(k => k.includes('[Waste]') || k.includes('Waste (kg)'));
+
+            pinnedKPIs.forEach(kpi => {
+                let val = 0;
+                let unit = "";
+                let colorClass = "text-white";
+                let icon = "📊";
+
+                if (kpi === 'OEE %' || kpi === 'EE') {
+                    val = avg(data.map(d => Number(d[kpi] || 0) * 100)).toFixed(1);
+                    unit = "%";
+                    colorClass = "text-brand-green";
+                    icon = "📈";
+                } else if (kpi === 'FPL vs Waste %') {
+                    const totalFplProd = sum(data.map(d => Number(d['FPL Production (kg)'] || 0)));
+                    const totalWaste = sum(data.map(row => {
+                        let s = 0;
+                        wasteKeys.forEach(wk => s += Number(row[wk] || 0));
+                        return s;
+                    }));
+                    val = totalFplProd > 0 ? (totalWaste / totalFplProd * 100).toFixed(1) : "0.0";
+                    unit = "%";
+                    icon = "🗑️";
+                } else if (kpi === 'Total Waste (kg)' || kpi === 'Waste % (Total)') {
+                    const totalFplProd = sum(data.map(d => Number(d['FPL Production (kg)'] || 0)));
+                    const totalWasteVal = sum(data.map(row => {
+                        let s = 0;
+                        wasteKeys.forEach(wk => s += Number(row[wk] || 0));
+                        return s;
+                    }));
+                    if (kpi === 'Total Waste (kg)') {
+                        val = totalWasteVal.toLocaleString();
+                        unit = " kg";
+                    } else {
+                        val = totalFplProd > 0 ? (totalWasteVal / totalFplProd * 100).toFixed(1) : "0.0";
+                        unit = "%";
+                    }
+                    icon = "🗑️";
+                } else {
+                    val = sum(data.map(d => Number(d[kpi] || 0))).toLocaleString();
+                    unit = kpi.includes('(kg)') || kpi.includes('[Waste]') ? " kg" : (kpi.includes('[Downtime]') ? " hrs" : "");
+                    if (kpi.includes('Production')) icon = "⚡";
+                    if (kpi.includes('Waste')) icon = "🗑️";
+                    if (kpi.includes('Downtime')) icon = "⏱️";
+                }
+
+                container.innerHTML += `
+                    <div class="glass-card rounded-xl p-6 shadow-lg">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <p class="text-gray-400 text-sm font-medium">${kpi}</p>
+                                <h3 class="text-2xl font-bold mt-1 ${colorClass}">${val}${unit}</h3>
+                            </div>
+                            <div class="p-2 bg-dark-700 rounded-lg text-lg">${icon}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function openCardConfig() {
+            document.getElementById('kpi-modal').classList.remove('hidden');
+            renderKPIOptions();
+        }
+
+        function renderKPIOptions() {
+            const container = document.getElementById('kpi-options-list');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const allKeys = Object.keys(currentData[0] || {}).filter(k =>
+                !['Month', 'Comments', 'Section', 'Total Waste'].includes(k)
+            );
+
+            // Add custom/calculated meta-KPIs
+            const options = [...allKeys, 'Total Waste (kg)', 'FPL vs Waste %', 'Waste % (Total)'];
+
+            document.getElementById('kpi-counter').textContent = `${pinnedKPIs.length} selected`;
+
+            options.forEach(k => {
+                const isActive = pinnedKPIs.includes(k);
+                const btn = document.createElement('button');
+                btn.className = `flex items-center justify-between p-3 rounded-xl border transition-all text-left ${isActive
+                    ? 'bg-brand-blue/20 border-brand-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]'
+                    : 'bg-dark-900/50 border-dark-700 text-gray-400 hover:border-dark-600'
+                    }`;
+                btn.onclick = () => toggleKPI(k);
+                btn.innerHTML = `
+                    <span class="text-sm font-medium truncate pr-2">${k}</span>
+                    <div class="w-5 h-5 flex items-center justify-center rounded-full border ${isActive ? 'bg-brand-blue border-brand-blue text-white' : 'border-dark-600'
+                    }">
+                        ${isActive ? '✓' : ''}
+                    </div>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function toggleKPI(kpi) {
+            const idx = pinnedKPIs.indexOf(kpi);
+            if (idx !== -1) {
+                pinnedKPIs.splice(idx, 1);
+            } else {
+                pinnedKPIs.push(kpi);
+            }
+            renderKPIOptions();
+        }
+
+        function selectAllKPIs() {
+            const allKeys = Object.keys(currentData[0] || {}).filter(k =>
+                !['Month', 'Comments', 'Section', 'Total Waste'].includes(k)
+            );
+            const options = [...allKeys, 'Total Waste (kg)', 'FPL vs Waste %', 'Waste % (Total)'];
+            pinnedKPIs = [...options];
+            renderKPIOptions();
+        }
+
+        function saveKPIConfig() {
+            localStorage.setItem('pinnedKPIs', JSON.stringify(pinnedKPIs));
+            document.getElementById('kpi-modal').classList.add('hidden');
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const data = getProcessedData();
+            if (!data || data.length === 0) {
+                document.getElementById('kpi-cards-container').innerHTML = '<p class="col-span-3 text-center text-gray-500 italic">No data found for this selection.</p>';
+                return;
+            }
+
+            renderKPIs(data);
+
+            const months = data.map(d => d.Month);
+            // Dynamic totals for charts
+            const allKeys = Object.keys(currentData[0] || {});
+            const wasteKeys = allKeys.filter(k => k.includes('[Waste]') || k === 'FPL Waste (kg)' || k === 'Offline Waste (kg)');
+            const downtimeKeys = allKeys.filter(k => k.includes('[Downtime]') || ['Process', 'Planning (G.C/M.C)', 'Mech. Plant', 'Electrical Plant', 'Power House', 'No. Job order/Material Shortage/Project Bruckner', 'Planned Preventive Maintenance+Filter Change'].includes(k));
+
+            const fplProd = data.map(d => Number(d['FPL Production (kg)'] || 0));
+            const offlineProd = data.map(d => Number(d['Offline Production (kg)'] || 0));
+            const totalWaste = data.map(row => {
+                let sum = 0;
+                wasteKeys.forEach(k => sum += Number(row[k] || 0));
+                return sum;
+            });
+
+            const oee = data.map(d => Number(d['OEE %'] || 0) * 100);
+
+            // Populate Dynamic Dept Filter
+            const breakdownType = document.getElementById('breakdown-type').value;
+            const filterEl = document.getElementById('dept-filter');
+            const currentFilter = filterEl.value;
+            const activeKeys = (breakdownType === 'waste') ? wasteKeys : downtimeKeys;
+
+            filterEl.innerHTML = '<option value="all">All Depts (Stacked)</option>';
+            activeKeys.forEach(k => {
+                const opt = document.createElement('option');
+                opt.value = k;
+                opt.textContent = k.replace(' [Waste]', '').replace(' [Downtime]', '').replace(' (kg)', '');
+                filterEl.appendChild(opt);
+            });
+            filterEl.value = activeKeys.includes(currentFilter) ? currentFilter : 'all';
+
+            // 5. Update Charts
+            let baseType = data.length > 24 ? 'bar' : 'line';
+
+            // Helper function to get dataset config based on chart type
+            function getDatasetConfig(type, label, data, color, bgColor, isSecondary = false) {
+                const config = {
+                    label,
+                    data,
+                    borderColor: color,
+                    backgroundColor: bgColor
+                };
+
+                if (type === 'area' || type === 'stackedArea') {
+                    config.fill = true;
+                    config.tension = 0.4;
+                    config.borderWidth = 2.5;
+                    config.pointRadius = 3;
+                } else if (type === 'line' || type === 'smoothLine') {
+                    config.fill = false;
+                    config.tension = type === 'smoothLine' ? 0.4 : 0;
+                    config.borderWidth = 2;
+                    config.pointRadius = 3;
+                } else if (type === 'bar') {
+                    config.borderRadius = 4;
+                } else if (type === 'stepLine') {
+                    config.fill = false;
+                    config.stepped = true;
+                    config.borderWidth = 2;
+                }
+
+                return config;
+            }
+
+            // 1. Production Trends - User-selectable chart type
+            const prodChartType = document.getElementById('production-chart-type').value;
+            const prodType = prodChartType === 'area' || prodChartType === 'stackedArea' ? 'line' : prodChartType === 'bar' ? 'bar' : 'line';
+            const prodDatasets = [
+                getDatasetConfig(prodChartType, 'FPL Production (kg)', fplProd, '#3b82f6', 'rgba(59, 130, 246, 0.25)'),
+                getDatasetConfig(prodChartType, 'Offline Production (kg)', offlineProd, '#60a5fa', 'rgba(96, 165, 250, 0.25)')
+            ];
+            updateChart('productionChart', prodType, months, prodDatasets, {
+                y: { title: { display: true, text: 'Production (kg)' }, stacked: prodChartType === 'stackedArea' },
+                x: { stacked: prodChartType === 'stackedArea' }
+            }, data);
+
+            // Production vs Waste - User-selectable visualization
+            const corrChartType = document.getElementById('correlation-chart-type').value;
+            let corrDatasets = [];
+            let corrType = 'line';
+            let corrOptions = {
+                y: { title: { display: true, text: 'FPL Production (kg)' } },
+                y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Total Waste (kg)', color: '#ef4444' } }
+            };
+
+            if (corrChartType === 'scatter') {
+                corrType = 'scatter';
+                corrDatasets = [{
+                    label: 'Production vs Waste',
+                    data: fplProd.map((p, i) => ({ x: p, y: totalWaste[i] })),
+                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                    borderColor: '#3b82f6',
+                    pointRadius: 5
+                }];
+                corrOptions = {
+                    x: { type: 'linear', title: { display: true, text: 'FPL Production (kg)' } },
+                    y: { title: { display: true, text: 'Total Waste (kg)' } }
+                };
+            } else if (corrChartType === 'bar') {
+                corrType = 'bar';
+                corrDatasets = [
+                    { label: 'FPL Production', data: fplProd, backgroundColor: 'rgba(59, 130, 246, 0.7)', yAxisID: 'y' },
+                    { label: 'Total Waste', data: totalWaste, backgroundColor: 'rgba(239, 68, 68, 0.7)', yAxisID: 'y1' }
+                ];
+            } else if (corrChartType === 'line') {
+                corrDatasets = [
+                    { label: 'FPL Production', data: fplProd, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', yAxisID: 'y', tension: 0.4, fill: false },
+                    { label: 'Total Waste', data: totalWaste, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', yAxisID: 'y1', tension: 0.4, fill: false }
+                ];
+            } else { // mixed (default)
+                corrDatasets = [
+                    { label: 'FPL Production', data: fplProd, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.15)', yAxisID: 'y', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 3 },
+                    { label: 'Total Waste', data: totalWaste, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.8)', yAxisID: 'y1', type: 'bar', borderRadius: 4 }
+                ];
+            }
+            updateChart('prodVsWasteChart', corrType, months, corrDatasets, corrOptions, data);
+
+            // 3. Main Breakdown Chart (Dynamic)
+            let breakdownDatasets = [];
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#f97316'];
+
+            if (filterEl.value === 'all') {
+                breakdownDatasets = activeKeys.map((k, i) => ({
+                    label: k.replace(' [Waste]', '').replace(' [Downtime]', ''),
+                    data: data.map(d => Number(d[k] || 0)),
+                    backgroundColor: colors[i % colors.length],
+                    borderRadius: 2
+                }));
+            } else {
+                breakdownDatasets = [{
+                    label: filterEl.value.replace(' [Waste]', '').replace(' [Downtime]', ''),
+                    data: data.map(d => Number(d[filterEl.value] || 0)),
+                    backgroundColor: colors[0],
+                    borderColor: colors[0],
+                    tension: 0.4,
+                    fill: viewMode !== 'yearly'
+                }];
+            }
+
+            // Use stacked area chart for visual depth when showing all departments
+            const breakdownType_chart = filterEl.value === 'all' ? 'line' : baseType;
+            if (filterEl.value === 'all') {
+                breakdownDatasets = breakdownDatasets.map(ds => ({
+                    ...ds,
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2,
+                    borderColor: ds.backgroundColor
+                }));
+            }
+            updateChart('mainBreakdownChart', breakdownType_chart, months, breakdownDatasets, {
+                scales: { x: { stacked: filterEl.value === 'all' }, y: { stacked: filterEl.value === 'all', title: { display: true, text: breakdownType === 'waste' ? 'KG' : 'Hours' } } }
+            }, data);
+
+            // 4. OEE Efficiency - User-selectable chart type
+            const oeeChartType = document.getElementById('oee-chart-type').value;
+            const oeeType = oeeChartType === 'area' || oeeChartType === 'smoothLine' ? 'line' : oeeChartType;
+            const oeeDataset = oeeChartType === 'bar' ? {
+                label: 'OEE %',
+                data: oee,
+                backgroundColor: '#10b981',
+                borderRadius: 4
+            } : {
+                label: 'OEE %',
+                data: oee,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                fill: oeeChartType === 'area',
+                tension: oeeChartType === 'smoothLine' || oeeChartType === 'area' ? 0.4 : 0,
+                borderWidth: 3,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#10b981'
+            };
+            updateChart('efficiencyChart', oeeType, months, [oeeDataset], { y: { max: 100, title: { display: true, text: 'OEE %' } } }, data);
+
+            // 5. Waste Trends - User-selectable chart type
+            const wasteChartType = document.getElementById('waste-chart-type').value;
+            const wasteType = wasteChartType === 'area' || wasteChartType === 'stepLine' ? 'line' : wasteChartType;
+            const fplWaste = data.map(d => Number(d['FPL Waste (kg)'] || 0));
+            const offlineWaste = data.map(d => Number(d['Offline Waste (kg)'] || 0));
+            const wasteDatasets = [
+                getDatasetConfig(wasteChartType, 'FPL Waste', fplWaste, '#ef4444', 'rgba(239, 68, 68, 0.25)'),
+                getDatasetConfig(wasteChartType, 'Offline Waste', offlineWaste, '#f59e0b', 'rgba(245, 158, 11, 0.25)')
+            ];
+            updateChart('wasteChart', wasteType, months, wasteDatasets, { y: { title: { display: true, text: 'Waste (kg)' } } }, data);
+        }
+
+        function updateChart(id, type, labels, datasets, optionsOverrides = {}, fullData = []) {
+            if (charts[id]) {
+                charts[id].destroy();
+            }
+            const canvas = document.getElementById(id);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            const isRadial = ['pie', 'doughnut', 'radar', 'polarArea'].includes(type);
+            const isHorizontal = optionsOverrides.indexAxis === 'y';
+            const { scales, plugins, ...otherOptions } = optionsOverrides;
+
+            // Map custom internal types to standard Chart.js types
+            let chartJsType = type;
+            if (['horizontalBar', 'stackedHorizontalBar', 'mixedBarLine', 'groupedBar'].includes(type)) {
+                chartJsType = 'bar';
+            } else if (type === 'dualAxisLine' || ['stepLine', 'smoothLine', 'area', 'stackedArea', 'percentageArea', 'steppedArea'].includes(type)) {
+                chartJsType = 'line';
+            }
+
+            charts[id] = new Chart(ctx, {
+                type: chartJsType,
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: isHorizontal ? 'y' : 'x',
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const monthData = fullData[index];
+                            if (monthData && monthData.Comments && monthData.Comments.trim() !== "") {
+                                document.getElementById('comment-modal-title').textContent = "Comment: " + monthData.Month;
+                                document.getElementById('comment-modal-text').textContent = monthData.Comments;
+                                document.getElementById('comment-modal').classList.remove('hidden');
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: isRadial ? 'right' : 'top', labels: { color: '#94a3b8' } },
+                        tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#3b82f6', bodyColor: '#fff', borderColor: '#334155', borderWidth: 1 },
+                        ...plugins
+                    },
+                    scales: isRadial ? {} : {
+                        x: Object.assign({ ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255, 255, 255, 0.05)' } }, (scales && scales.x) || {}),
+                        y: Object.assign({ ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255, 255, 255, 0.05)' } }, (scales && scales.y) || {}),
+                        y1: (scales && scales.y1) || undefined
+                    },
+                    ...otherOptions
+                }
+            });
+        }
+
+        // --- Editor Functions ---
+        function openEditor() {
+            renderEditorTable();
+            document.getElementById('editor-modal').classList.remove('hidden');
+        }
+
+        function addNewKPI() {
+            const name = prompt("Enter the name for the new KPI / Department (e.g., 'Mechanical', 'Packaging'):");
+            if (!name) return;
+
+            const category = prompt("What type is this?\n1. General Production KPI\n2. Waste Department / Category\n3. Downtime Department / Category\n4. Other", "1");
+            let suffix = "";
+            if (category === "2") suffix = " [Waste]";
+            else if (category === "3") suffix = " [Downtime]";
+            else if (category === "4") suffix = " [Other]";
+
+            const finalName = name + suffix;
+
+            if (currentData.some(row => row.hasOwnProperty(finalName))) {
+                alert("A KPI with this name already exists.");
+                return;
+            }
+
+            currentData.forEach(row => {
+                row[finalName] = 0;
+            });
+            renderEditorTable();
+            initCustomChartControls();
+            alert(`'${finalName}' added. You can now enter data for it in the table.`);
+        }
+
+        function renderEditorTable() {
+            const thead = document.getElementById('editor-table-head');
+            const tbody = document.getElementById('editor-table-body');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (currentData.length === 0) return;
+
+            // Determine all unique keys (excluding Month) to build columns
+            // Start with a standard order but allow any new keys
+            const standardOrder = [
+                'FPL Production (kg)', 'Offline Production (kg)', 'FPL Waste (kg)', 'Offline Waste (kg)',
+                'P-Plain-Gr Production (Total)', 'P-Plain-Gr Production (FPL)', 'P-Plain-Gr Production (OFFLine)',
+                'OEE %', 'EE', 'Process', 'Planning (G.C/M.C)', 'Mech. Plant', 'Electrical Plant', 'Power House',
+                'No. Job order/Material Shortage/Project Bruckner', 'Planned Preventive Maintenance+Filter Change'
+            ];
+
+            const allRowKeys = new Set();
+            currentData.forEach(row => {
+                Object.keys(row).forEach(k => {
+                    if (k !== 'Month' && k !== 'Total Waste') allRowKeys.add(k);
+                });
+            });
+
+            const dynamicKeys = Array.from(allRowKeys).sort((a, b) => {
+                const idxA = standardOrder.indexOf(a);
+                const idxB = standardOrder.indexOf(b);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
+                return a.localeCompare(b);
+            });
+
+            const allKeys = ['Month', 'Section', ...dynamicKeys, 'Comments'];
+
+            // Render Header
+            const headerTr = document.createElement('tr');
+            allKeys.forEach(k => {
+                const th = document.createElement('th');
+                th.className = "px-6 py-3 whitespace-nowrap";
+                let label = k;
+                if (k === 'No. Job order/Material Shortage/Project Bruckner') label = 'Mat/Job Order';
+                if (k === 'Planned Preventive Maintenance+Filter Change') label = 'Maint/Filter';
+                th.textContent = label;
+                headerTr.appendChild(th);
+            });
+            const actionTh = document.createElement('th');
+            actionTh.className = "px-6 py-3";
+            actionTh.textContent = "Action";
+            headerTr.appendChild(actionTh);
+            thead.appendChild(headerTr);
+
+            // Sort by month
+            currentData.sort((a, b) => (a.Month || '').localeCompare(b.Month || ''));
+
+            currentData.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "bg-dark-800 border-b border-dark-700 hover:bg-dark-700";
+
+                allKeys.forEach(k => {
+                    const td = document.createElement('td');
+                    td.className = "px-6 py-4";
+                    if (k === 'Comments' || k === 'Section') {
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.placeholder = k === 'Section' ? "Department name..." : "Add optional comment...";
+                        input.value = row[k] || "";
+                        input.className = "bg-dark-900 border border-dark-600 text-white text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 min-w-[200px]";
+                        input.onchange = (e) => {
+                            currentData[index][k] = e.target.value;
+                        };
+                        td.appendChild(input);
+                    } else {
+                        const input = document.createElement('input');
+                        input.type = (k === 'Month') ? 'date' : 'number';
+                        input.value = row[k] || (k === 'Month' ? '' : 0);
+                        if (k.includes('%') || k === 'EE' || k === 'OEE %') input.step = "0.01";
+                        input.className = "bg-dark-900 border border-dark-600 text-white text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 min-w-[120px]";
+                        input.onchange = (e) => {
+                            const val = (k === 'Month') ? e.target.value : (parseFloat(e.target.value) || 0);
+                            currentData[index][k] = val;
+                        };
+                        td.appendChild(input);
+                    }
+                    tr.appendChild(td);
+                });
+
+                const deleteTd = document.createElement('td');
+                deleteTd.className = "px-6 py-4";
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = "🗑️";
+                deleteBtn.className = "hover:scale-125 transition-transform p-2";
+                deleteBtn.onclick = () => deleteRow(index);
+                deleteTd.appendChild(deleteBtn);
+                tr.appendChild(deleteTd);
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function addNewRow() {
+            let lastDate = new Date();
+            if (currentData.length > 0) {
+                const dates = currentData.map(d => d.Month).filter(d => d).sort();
+                if (dates.length > 0) {
+                    lastDate = new Date(dates[dates.length - 1]);
+                    lastDate.setMonth(lastDate.getMonth() + 1);
+                }
+            }
+            const y = lastDate.getFullYear();
+            const m = String(lastDate.setMonth(lastDate.getMonth())).padStart(2, '0'); // Fix: lastDate was already mutated by setMonth
+            // Actually simpler:
+            const month = String(lastDate.getMonth() + 1).padStart(2, '0');
+            const defaultDate = `${lastDate.getFullYear()}-${month}-01`;
+
+            // New row should have ALL keys found in existing data
+            const currentSection = document.getElementById('section-filter').value;
+            const newRow = {
+                "Month": defaultDate,
+                "Section": currentSection !== 'all' ? currentSection : ''
+            };
+            const allKeys = new Set();
+            currentData.forEach(row => {
+                Object.keys(row).forEach(k => {
+                    if (k !== 'Month' && k !== 'Section') allKeys.add(k);
+                });
+            });
+            allKeys.forEach(k => newRow[k] = 0);
+
+            currentData.push(newRow);
+            renderEditorTable();
+            const tableContainer = document.querySelector('#editor-modal .overflow-x-auto');
+            if (tableContainer) tableContainer.scrollTop = tableContainer.scrollHeight;
+        }
+
+        // --- Custom Chart Functions ---
+        function initCustomChartControls() {
+            if (!currentData || currentData.length === 0) return;
+
+            const standardOrder = [
+                'FPL Production (kg)', 'Offline Production (kg)', 'FPL Waste (kg)', 'Offline Waste (kg)',
+                'P-Plain-Gr Production (Total)', 'P-Plain-Gr Production (FPL)', 'P-Plain-Gr Production (OFFLine)',
+                'OEE %', 'EE', 'Process', 'Planning (G.C/M.C)', 'Mech. Plant', 'Electrical Plant', 'Power House',
+                'No. Job order/Material Shortage/Project Bruckner', 'Planned Preventive Maintenance+Filter Change'
+            ];
+
+            const allNumericKeys = new Set();
+            currentData.forEach(row => {
+                Object.keys(row).forEach(k => {
+                    if (k !== 'Month' && typeof row[k] === 'number') allNumericKeys.add(k);
+                });
+            });
+
+            const allKeys = Array.from(allNumericKeys).sort((a, b) => {
+                const idxA = standardOrder.indexOf(a);
+                const idxB = standardOrder.indexOf(b);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
+                return a.localeCompare(b);
+            });
+
+            const sel1 = document.getElementById('custom-metric-1');
+            const sel2 = document.getElementById('custom-metric-2');
+            sel1.innerHTML = '';
+            sel2.innerHTML = '<option value="">None</option>'; // Reset
+
+            allKeys.forEach(k => {
+                const opt1 = document.createElement('option');
+                opt1.value = k;
+                opt1.textContent = k;
+                sel1.appendChild(opt1);
+
+                const opt2 = document.createElement('option');
+                opt2.value = k;
+                opt2.textContent = k;
+                sel2.appendChild(opt2);
+            });
+
+            if (allKeys.includes('FPL Production (kg)')) sel1.value = 'FPL Production (kg)';
+
+            // Populate custom Year filter
+            const years = [...new Set(currentData.map(d => d.Month ? d.Month.substring(0, 4) : null).filter(y => y))].sort().reverse();
+            const customYearFilter = document.getElementById('custom-year-filter');
+            customYearFilter.innerHTML = '<option value="all">All Years</option>';
+            years.forEach(y => {
+                customYearFilter.innerHTML += `<option value="${y}">${y}</option>`;
+            });
+
+            // Populate custom Section filter
+            const sections = new Set();
+            currentData.forEach(d => { if (d.Section) sections.add(d.Section); });
+            factorySections.forEach(s => sections.add(s));
+            const customSectionFilter = document.getElementById('custom-section-filter');
+            customSectionFilter.innerHTML = '<option value="all">All Sections</option>';
+            Array.from(sections).sort().forEach(s => {
+                customSectionFilter.innerHTML += `<option value="${s}">Section: ${s}</option>`;
+            });
+        }
+
+        function renderCustomChart() {
+            const m1 = document.getElementById('custom-metric-1').value;
+            const m2 = document.getElementById('custom-metric-2').value;
+            const type = document.getElementById('custom-chart-type').value;
+
+            if (!m1) { alert("Please select at least Metric 1"); return; }
+
+            // Use custom filters instead of global filters
+            const customYear = document.getElementById('custom-year-filter').value;
+            const customMonth = document.getElementById('custom-month-filter').value;
+            const customSection = document.getElementById('custom-section-filter').value;
+
+            let filteredData = currentData;
+
+            // Apply Year filter
+            if (customYear !== 'all') {
+                filteredData = filteredData.filter(d => d.Month && d.Month.startsWith(customYear));
+            }
+
+            // Apply Month filter
+            if (customMonth !== 'all') {
+                filteredData = filteredData.filter(d => d.Month && d.Month.substring(5, 7) === customMonth);
+            }
+
+            // Apply Section filter
+            if (customSection !== 'all') {
+                filteredData = filteredData.filter(d => d.Section === customSection);
+            }
+
+            if (!filteredData.length) {
+                alert("No data found for the selected filters. Try adjusting Year, Month, or Section.");
+                return;
+            }
+
+            const labels = filteredData.map(d => d.Month);
+            let datasets = [];
+            let scales = {
+                y: {
+                    type: type.includes('Log') ? 'logarithmic' : 'linear',
+                    display: true,
+                    position: 'left',
+                    stacked: ['stackedBar', 'stackedHorizontalBar', 'stackedArea', 'percentageArea'].includes(type),
+                    ticks: { color: '#94a3b8' },
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                },
+                x: {
+                    stacked: ['stackedBar', 'stackedHorizontalBar', 'stackedArea', 'percentageArea'].includes(type),
+                    ticks: { color: '#94a3b8' }
+                }
+            };
+
+            if (type === 'scatter') {
+                if (!m2) { alert("Scatter Plot requires both Metric 1 (X) and Metric 2 (Y)"); return; }
+                datasets = [{
+                    label: `${m1} vs ${m2}`,
+                    data: filteredData.map(d => ({ x: Number(d[m1] || 0), y: Number(d[m2] || 0) })),
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: '#3b82f6',
+                    pointRadius: 6
+                }];
+                scales.x = { type: 'linear', position: 'bottom', ticks: { color: '#94a3b8' }, title: { display: true, text: m1, color: '#94a3b8' } };
+                scales.y.title = { display: true, text: m2, color: '#94a3b8' };
+            } else {
+                datasets.push({
+                    label: m1,
+                    data: filteredData.map(d => Number(d[m1] || 0)),
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                    yAxisID: 'y',
+                    tension: type === 'smoothLine' ? 0.4 : 0,
+                    fill: ['area', 'stackedArea', 'steppedArea', 'percentageArea'].includes(type),
+                    stepped: ['stepLine', 'steppedArea'].includes(type)
+                });
+
+                if (m2) {
+                    datasets.push({
+                        label: m2,
+                        data: filteredData.map(d => Number(d[m2] || 0)),
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.5)',
+                        yAxisID: (type === 'mixedBarLine' || type === 'dualAxisLine') ? 'y1' : 'y',
+                        type: type === 'mixedBarLine' ? 'line' : undefined,
+                        tension: type === 'smoothLine' ? 0.4 : 0,
+                        fill: ['area', 'stackedArea', 'steppedArea'].includes(type),
+                        stepped: ['stepLine', 'steppedArea'].includes(type)
+                    });
+
+                    if (type === 'mixedBarLine' || type === 'dualAxisLine') {
+                        scales.y1 = {
+                            type: 'linear', display: true, position: 'right',
+                            grid: { drawOnChartArea: false }, ticks: { color: '#ef4444' }
+                        };
+                    }
+                }
+            }
+
+            const chartOptions = { scales };
+            if (type === 'horizontalBar' || type === 'stackedHorizontalBar') {
+                chartOptions.indexAxis = 'y';
+            }
+
+            // Display the time period being compared
+            if (filteredData.length > 0) {
+                const firstMonth = filteredData[0].Month;
+                const lastMonth = filteredData[filteredData.length - 1].Month;
+                const periodText = filteredData.length === 1 ? firstMonth : `${firstMonth} to ${lastMonth}`;
+                document.getElementById('custom-chart-period-text').textContent = periodText;
+                document.getElementById('custom-chart-period').classList.remove('hidden');
+            }
+
+            updateChart('customChart', type, labels, datasets, chartOptions, filteredData);
+        }
+
+        function deleteRow(index) {
+            if (confirm('Delete this row?')) {
+                currentData.splice(index, 1);
+                renderEditorTable();
+            }
+        }
+
+        function closeEditor() {
+            document.getElementById('editor-modal').classList.add('hidden');
+            initData(); // Re-init to refresh Year dropdown if changed
+        }
+
+        function saveData() {
+            localStorage.setItem('kpi_dashboard_data', JSON.stringify(currentData));
+            alert("Data saved successfully!");
+            document.getElementById('editor-modal').classList.add('hidden');
+            initData();
+        }
+
+        function resetData() {
+            if (confirm("Are you sure you want to discard all your edits and return to the Excel data?")) {
+                localStorage.removeItem('kpi_dashboard_data');
+                closeEditor();
+                initData();
+            }
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(currentData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `production_dashboard_data_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        if (confirm("This will overwrite your current edits with the imported file. Continue?")) {
+                            currentData = imported;
+                            renderEditorTable();
+                            alert("Data imported successfully. Remember to click 'Save Changes' to apply it to the dashboard.");
+                        }
+                    } else {
+                        alert("Invalid data format. Expected a JSON array.");
+                    }
+                } catch (err) {
+                    alert("Error parsing file: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        document.addEventListener('DOMContentLoaded', initData);
+    </script>
+
+    <!-- Error Monitor UI -->
+    <div id="error-monitor"
+        class="fixed bottom-4 left-4 right-4 bg-red-900/90 border border-red-500 text-red-100 p-4 rounded-xl shadow-2xl hidden z-50">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="font-bold">⚠️ Dashboard System Error</h3>
+            <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="text-lg">✕</button>
+        </div>
+        <p class="text-xs opacity-80 mb-2 font-mono">If you see errors below, click 'Troubleshoot' in the header.</p>
+    </div>
+</body>
+
+</html>
