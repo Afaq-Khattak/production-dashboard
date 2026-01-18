@@ -27,7 +27,7 @@ window.dashboardData = [
   },
   {
     "Month": "2025-01-01",
-    "FPL Production (kg)": 73.0,
+    "FPL Production (kg)": 1735037.1065,
     "Offline Production (kg)": 1536997.17,
     "FPL Waste (kg)": 102266.89349999977,
     "Offline Waste (kg)": 58970.216,
